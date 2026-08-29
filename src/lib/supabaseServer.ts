@@ -21,3 +21,5 @@ export const getServiceSupabase = () => {
     },
   });
 };
+
+export const getSupabaseServerClient = getServiceSupabase;

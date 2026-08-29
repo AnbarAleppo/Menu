@@ -152,6 +152,22 @@ function MenuAppContent() {
     showToast(`تم إرسال طلبك إلى المطبخ بنجاح (${tableNumber})! 🎉`);
   };
 
+  const handleReorderItems = (items: CartItem[]) => {
+    setCart((prev) => {
+      const merged = [...prev];
+      items.forEach((newItem) => {
+        const existing = merged.find((i) => i.id === newItem.id);
+        if (existing) {
+          existing.qty += newItem.qty;
+        } else {
+          merged.push({ ...newItem });
+        }
+      });
+      return merged;
+    });
+    showToast('تمت إضافة أصناف الطلب السابق إلى سلتك');
+  };
+
   const totalCartCount = cart.reduce((sum, item) => sum + item.qty, 0);
 
   return (
@@ -173,7 +189,17 @@ function MenuAppContent() {
         <HeroSection />
 
         {/* Menu Section */}
-        <section id="menu-section" className="py-12 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
+        <section id="menu-section" className="py-10 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
+          {/* Header Title & Subtitle directly Above Categories Bar */}
+          <div className="mb-6">
+            <h2 className="font-cairo font-black text-3xl sm:text-4xl text-anbar-dark tracking-tight">
+              قائمة الطعام الكاملة
+            </h2>
+            <p className="text-anbar-dark/65 text-xs sm:text-sm mt-1.5 font-medium">
+              أطباق طازجة محضرة بأجود المكونات المحلية وزيوت العصر البارد.
+            </p>
+          </div>
+
           <CategoryTabs
             categories={categories}
             activeCategory={activeCategory}
@@ -280,6 +306,7 @@ function MenuAppContent() {
         onUpdateCartQty={handleUpdateCartQty}
         onClearCart={handleClearCart}
         onOrderSuccess={handleOrderSuccess}
+        onReorderItems={handleReorderItems}
       />
 
       <FloatingCartBar cart={cart} onOpenCart={() => setIsCartOpen(true)} />

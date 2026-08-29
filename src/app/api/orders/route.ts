@@ -86,15 +86,27 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: 'Supabase is not configured' }, { status: 400 });
     }
 
-    const { id, status } = await req.json();
+    const body = await req.json();
+    const { id, status, items, total, notes, table_number, customer_name } = body;
 
-    if (!id || !status) {
-      return NextResponse.json({ error: 'Missing order id or status' }, { status: 400 });
+    if (!id) {
+      return NextResponse.json({ error: 'Missing order id' }, { status: 400 });
     }
+
+    const updatePayload: Record<string, any> = {
+      updated_at: new Date().toISOString(),
+    };
+
+    if (status !== undefined) updatePayload.status = status;
+    if (items !== undefined) updatePayload.items = items;
+    if (total !== undefined) updatePayload.total = total;
+    if (notes !== undefined) updatePayload.notes = notes;
+    if (table_number !== undefined) updatePayload.table_number = table_number;
+    if (customer_name !== undefined) updatePayload.customer_name = customer_name;
 
     const { data, error } = await serverSupabase
       .from('orders')
-      .update({ status, updated_at: new Date().toISOString() })
+      .update(updatePayload)
       .eq('id', id)
       .select()
       .single();

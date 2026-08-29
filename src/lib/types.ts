@@ -39,7 +39,7 @@ export interface Order {
   customer_phone?: string;
   items: CartItem[];
   total: number;
-  status: 'new' | 'preparing' | 'served' | 'completed' | 'cancelled';
+  status: 'new' | 'accepted' | 'declined' | 'completed' | 'cancelled' | 'preparing' | 'served';
   notes?: string;
   created_at?: string;
 }

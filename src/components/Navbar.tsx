@@ -3,7 +3,7 @@
 import React from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { Search, ShoppingBag, X, ShieldAlert, QrCode, MapPin } from 'lucide-react';
+import { Search, ShoppingBag, X } from 'lucide-react';
 
 interface NavbarProps {
   searchTerm: string;
@@ -37,18 +37,6 @@ export default function Navbar({
               priority
             />
           </Link>
-
-          {/* Active Table QR Chip */}
-          {activeTable && (
-            <div
-              onClick={onOpenCart}
-              className="cursor-pointer hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-800 text-[11px] font-black hover:bg-emerald-500/20 transition-colors shadow-2xs"
-              title="رقم طاولتك المرتبط عبر رمز QR"
-            >
-              <QrCode className="w-3.5 h-3.5 text-emerald-600" />
-              <span>{activeTable}</span>
-            </div>
-          )}
         </div>
 
         {/* Search Bar (Desktop) */}
@@ -73,17 +61,7 @@ export default function Navbar({
         </div>
 
         {/* Actions */}
-        <div className="flex items-center gap-2.5 sm:gap-3">
-          {/* Admin Dashboard Link */}
-          <Link
-            href="/admin"
-            className="hidden sm:flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-white border border-anbar-subtle text-anbar-dark/70 hover:text-anbar-amber hover:border-anbar-amber text-xs font-bold transition-all shadow-xs"
-            title="لوحة تحكم الإدارة والمطبخ"
-          >
-            <ShieldAlert className="w-3.5 h-3.5 text-anbar-amber" />
-            <span>لوحة الإدارة</span>
-          </Link>
-
+        <div className="flex items-center gap-2 sm:gap-2.5">
           {/* Mobile Search Trigger */}
           <button
             onClick={onOpenMobileSearch}

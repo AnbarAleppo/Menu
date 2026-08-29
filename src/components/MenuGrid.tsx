@@ -39,7 +39,7 @@ export default function MenuGrid({
   }
 
   return (
-    <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
+    <div id="menu-grid" className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8 scroll-mt-36">
       {items.map((item) => {
         const cartItem = cart.find((c) => c.id === item.id);
         const qtyInCart = cartItem ? cartItem.qty : 0;

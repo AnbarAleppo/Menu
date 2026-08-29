@@ -2,7 +2,7 @@
 
 import React from 'react';
 import Image from 'next/image';
-import { Sparkles, Leaf, Flame, Heart, ArrowDown, MapPin } from 'lucide-react';
+import { ArrowDown } from 'lucide-react';
 
 export default function HeroSection() {
   return (
@@ -10,12 +10,6 @@ export default function HeroSection() {
       <div className="grid md:grid-cols-12 gap-8 lg:gap-14 items-center">
         {/* Hero Intro Text */}
         <div className="md:col-span-7 space-y-6 text-start">
-          <div className="inline-flex items-center gap-2.5 px-4 py-1.5 rounded-full bg-anbar-amber/10 border border-anbar-amber/30 text-anbar-amber text-xs font-bold shadow-xs">
-            <span className="w-2 h-2 rounded-full bg-anbar-amber animate-ping"></span>
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>قائمة الموسم الجديد متوفرة الآن في الدار</span>
-          </div>
-
           <h1 className="font-cairo text-4xl sm:text-6xl lg:text-7xl font-extrabold tracking-tight text-anbar-dark leading-[1.18]">
             حيث يلتقي الدفء <br />
             <span className="text-anbar-amber font-black">بالمذاق العصري.</span>
@@ -24,22 +18,6 @@ export default function HeroSection() {
           <p className="text-anbar-dark/75 text-base sm:text-lg max-w-xl font-medium leading-relaxed">
             عنبر هو ملاذ هادئ صُمم للصباحات الهادئة، التجمعات النابضة بالحياة، والوصفات المحضرة بحرفية من الفرن الحجري وتحت شمس الطبيعة.
           </p>
-
-          {/* Feature Badges Strip */}
-          <div className="flex flex-wrap items-center gap-2.5 pt-1 text-xs font-bold text-anbar-dark/70">
-            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/80 border border-anbar-subtle shadow-2xs">
-              <Leaf className="w-3.5 h-3.5 text-emerald-600" />
-              <span>مكونات عضوية 100%</span>
-            </div>
-            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/80 border border-anbar-subtle shadow-2xs">
-              <Flame className="w-3.5 h-3.5 text-amber-600" />
-              <span>طهي على خشب اللوز</span>
-            </div>
-            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/80 border border-anbar-subtle shadow-2xs">
-              <Heart className="w-3.5 h-3.5 text-rose-500" />
-              <span>طازج يومياً</span>
-            </div>
-          </div>
 
           <div className="pt-2">
             <a
@@ -70,25 +48,6 @@ export default function HeroSection() {
                   sizes="(max-width: 768px) 100vw, 450px"
                   priority
                 />
-                <div className="absolute inset-0 bg-gradient-to-t from-anbar-dark/80 via-transparent to-black/20"></div>
-
-                {/* Floating Ambient Badges */}
-                <div className="absolute top-4 right-4 z-10">
-                  <span className="px-3.5 py-1.5 rounded-full bg-white/95 text-anbar-dark font-bold text-xs backdrop-blur-md shadow-md flex items-center gap-2 border border-anbar-subtle">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                    <span>أجواء دافئة ومميزة</span>
-                  </span>
-                </div>
-
-                <div className="absolute bottom-4 right-4 left-4 z-10 text-white">
-                  <div className="flex items-center gap-2 mb-1 text-anbar-amber text-xs font-bold">
-                    <MapPin className="w-3.5 h-3.5" />
-                    <span>جلسات عنبر المشرقة</span>
-                  </div>
-                  <p className="text-xs text-white/90 font-medium leading-relaxed">
-                    تصميم معماري مستوحى من التراث بلمسة معاصرة وإطلالة مريحة.
-                  </p>
-                </div>
               </div>
             </div>
           </div>
