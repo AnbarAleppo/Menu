@@ -13,10 +13,10 @@ export interface StoredCustomerOrder {
 }
 
 const STORAGE_KEY = 'anbar_customer_orders';
-const FOUR_HOURS_MS = 4 * 60 * 60 * 1000; // 4 Hours in milliseconds
+const ONE_HOUR_MS = 1 * 60 * 60 * 1000; // 1 Hour in milliseconds
 
 /**
- * Clean up expired orders (older than 4 hours) and get active stored orders
+ * Clean up expired orders (older than 1 hour) and get active stored orders
  */
 export function getCustomerOrdersFromStorage(): StoredCustomerOrder[] {
   if (typeof window === 'undefined') return [];
@@ -28,9 +28,9 @@ export function getCustomerOrdersFromStorage(): StoredCustomerOrder[] {
     const parsed: StoredCustomerOrder[] = JSON.parse(raw);
     const now = Date.now();
 
-    // Filter out orders older than 4 hours
+    // Filter out orders older than 1 hour
     const activeOrders = parsed.filter((order) => {
-      const expiresAt = order.expires_at || order.timestamp + FOUR_HOURS_MS;
+      const expiresAt = order.expires_at || order.timestamp + ONE_HOUR_MS;
       return now < expiresAt;
     });
 
@@ -47,7 +47,7 @@ export function getCustomerOrdersFromStorage(): StoredCustomerOrder[] {
 }
 
 /**
- * Save newly submitted order to localStorage with a 4-hour retention timestamp
+ * Save newly submitted order to localStorage with a 1-hour retention timestamp
  */
 export function saveCustomerOrderToStorage(orderData: {
   id?: string;
@@ -64,13 +64,13 @@ export function saveCustomerOrderToStorage(orderData: {
   const newOrder: StoredCustomerOrder = {
     id: orderData.id || `order-${now}`,
     order_number: orderData.order_number,
-    table_number: orderData.table_number || 'طاولة عامة',
+    table_number: orderData.table_number || 'طلب مباشر',
     items: orderData.items || [],
     total: orderData.total || 0,
     notes: orderData.notes || '',
     status: orderData.status || 'new',
     timestamp: now,
-    expires_at: now + FOUR_HOURS_MS,
+    expires_at: now + ONE_HOUR_MS,
   };
 
   try {
@@ -84,11 +84,11 @@ export function saveCustomerOrderToStorage(orderData: {
 }
 
 /**
- * Format remaining time from the 4-hour retention window
+ * Format remaining time from the 1-hour retention window
  */
 export function formatRemainingTime(expiresAt: number): string {
   const diffMs = expiresAt - Date.now();
-  if (diffMs <= 0) return 'انتهت صلاحية الحفظ (مضت 4 ساعات)';
+  if (diffMs <= 0) return 'انتهت صلاحية الحفظ (مضت ساعة واحدة)';
 
   const totalMinutes = Math.floor(diffMs / (1000 * 60));
   const hours = Math.floor(totalMinutes / 60);
@@ -98,4 +98,16 @@ export function formatRemainingTime(expiresAt: number): string {
     return `محفوظ لمدة ${hours} س و ${minutes} د`;
   }
   return `محفوظ لمدة ${minutes} دقيقة`;
+}
+
+/**
+ * Clear all stored customer orders manually
+ */
+export function clearStoredCustomerOrders(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+  } catch (err) {
+    console.error('Failed to clear customer orders:', err);
+  }
 }

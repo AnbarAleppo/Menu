@@ -1,8 +1,11 @@
+export type MenuSection = 'food' | 'drinks';
+
 export interface Category {
   id: string;
   slug: string;
   name_ar: string;
   name_en?: string;
+  section?: MenuSection;
   sort_order: number;
   is_active: boolean;
 }
@@ -21,6 +24,8 @@ export interface MenuItem {
   is_available: boolean;
   is_featured: boolean;
   sort_order: number;
+  rating?: number;
+  rating_count?: number;
 }
 
 export interface CartItem {

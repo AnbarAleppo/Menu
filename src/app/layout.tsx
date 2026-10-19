@@ -11,11 +11,18 @@ const cairo = Cairo({
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://anbar.restaurant'),
-  title: "عنبر | مطعم ومقهى Anbar",
+  title: "Arbar | Menu",
   description: "مطبخ عصري ومساحة هادئة لتناول الأطعمة الصحية والمشروبات الدافئة تحت شمس الطبيعة.",
-  keywords: ["عنبر", "مطعم عنبر", "قائمة طعام عنبر", "Anbar Restaurant", "حلب", "طعام شرقي عصري"],
+  icons: {
+    icon: [
+      { url: '/favicon.svg', type: 'image/svg+xml' },
+      { url: '/icon.svg', type: 'image/svg+xml' },
+    ],
+    apple: '/favicon.svg',
+  },
+  keywords: ["عنبر", "مطعم عنبر", "قائمة طعام عنبر", "Anbar Restaurant", "Arbar Menu", "حلب", "طعام شرقي عصري"],
   openGraph: {
-    title: "عنبر | مطعم ومقهى Anbar",
+    title: "Arbar | Menu",
     description: "حيث يلتقي الدفء بالمذاق العصري. استكشف قائمة طعام عنبر الكاملة.",
     type: "website",
     locale: "ar_SY",

@@ -65,21 +65,6 @@ export default function LiveOrdersPage() {
     setTimeout(() => setToastMessage(null), 3200);
   };
 
-  // Fetch configured PIN code from backend
-  const fetchPin = async () => {
-    try {
-      const res = await fetch('/api/settings?key=kitchen_pin');
-      if (res.ok) {
-        const data = await res.json();
-        if (data.value) {
-          setActualPin(String(data.value));
-        }
-      }
-    } catch (e) {
-      console.error('Failed to fetch PIN:', e);
-    }
-  };
-
   // Fetch menu items for the editing modal
   const loadMenu = async () => {
     try {
@@ -95,12 +80,22 @@ export default function LiveOrdersPage() {
     }
   };
 
-  // Check session storage on mount
+  // Check server session on mount
   useEffect(() => {
-    fetchPin();
-    const sessionAuth = sessionStorage.getItem('anbar_orders_unlocked');
-    if (sessionAuth === 'true') {
-      setIsAuthenticated(true);
+    const savedToken = sessionStorage.getItem('anbar_kitchen_token');
+    if (savedToken) {
+      fetch('/api/auth/me', {
+        headers: { Authorization: `Bearer ${savedToken}` },
+      })
+        .then((r) => r.json())
+        .then((data) => {
+          if (data.authenticated) {
+            setIsAuthenticated(true);
+          } else {
+            sessionStorage.removeItem('anbar_kitchen_token');
+          }
+        })
+        .catch(() => {});
     }
   }, []);
 
@@ -125,35 +120,53 @@ export default function LiveOrdersPage() {
     }
   };
 
-  // Handle PIN verification
+  // Secure Server-side PIN verification
+  const verifyPinServer = async (pin: string) => {
+    setIsVerifyingPin(true);
+    setPinError(null);
+    try {
+      const res = await fetch('/api/auth/kitchen', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pin }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setIsAuthenticated(true);
+        if (data.token) {
+          sessionStorage.setItem('anbar_kitchen_token', data.token);
+        }
+        setPinError(null);
+        setPinInput('');
+        showToast('تم تسجيل الدخول بنجاح! 👨‍🍳');
+        return true;
+      } else {
+        setPinError(data.error || 'رمز PIN غير صحيح. يرجى المحاولة ثانية.');
+        setPinInput('');
+        return false;
+      }
+    } catch {
+      setPinError('تعذر التحقق من الخادم. يرجى المحاولة ثانية.');
+      setPinInput('');
+      return false;
+    } finally {
+      setIsVerifyingPin(false);
+    }
+  };
+
+  // Handle PIN verification form submit
   const handlePinSubmit = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (pinInput.length === 0) return;
-
-    setIsVerifyingPin(true);
-    if (pinInput === actualPin || pinInput === '1234') {
-      setIsAuthenticated(true);
-      sessionStorage.setItem('anbar_orders_unlocked', 'true');
-      setPinError(null);
-      setPinInput('');
-      showToast('تم التحقق بنجاح! أهلاً بك في شاشة الطلبات');
-    } else {
-      setPinError('رمز PIN غير صحيح. يرجى المحاولة ثانية.');
-      setPinInput('');
-    }
-    setIsVerifyingPin(false);
+    verifyPinServer(pinInput);
   };
 
   const handleKeypadPress = (val: string) => {
     if (pinInput.length < 8) {
       const newPin = pinInput + val;
       setPinInput(newPin);
-      if (newPin.length === actualPin.length && newPin === actualPin) {
-        setIsAuthenticated(true);
-        sessionStorage.setItem('anbar_orders_unlocked', 'true');
-        setPinError(null);
-        setPinInput('');
-        showToast('تم تسجيل الدخول بنجاح! 👨‍🍳');
+      if (newPin.length >= 4) {
+        verifyPinServer(newPin);
       }
     }
   };
@@ -168,8 +181,11 @@ export default function LiveOrdersPage() {
     setPinError(null);
   };
 
-  const handleLockScreen = () => {
-    sessionStorage.removeItem('anbar_orders_unlocked');
+  const handleLockScreen = async () => {
+    try {
+      await fetch('/api/auth/me', { method: 'POST' });
+    } catch {}
+    sessionStorage.removeItem('anbar_kitchen_token');
     setIsAuthenticated(false);
     setPinInput('');
     showToast('تم قفل الشاشة 🔒');
@@ -179,7 +195,10 @@ export default function LiveOrdersPage() {
   const loadOrders = async (silent = false) => {
     if (!silent) setIsLoading(true);
     try {
-      const res = await fetch('/api/orders');
+      const token = sessionStorage.getItem('anbar_kitchen_token');
+      const res = await fetch('/api/orders', {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
       if (res.ok) {
         const data = await res.json();
         if (data.data) {
@@ -217,9 +236,13 @@ export default function LiveOrdersPage() {
   const handleUpdateOrderStatus = async (orderId?: string, newStatus?: Order['status']) => {
     if (!orderId || !newStatus) return;
     try {
+      const token = sessionStorage.getItem('anbar_kitchen_token');
       const res = await fetch('/api/orders', {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({ id: orderId, status: newStatus }),
       });
 
@@ -303,9 +326,13 @@ export default function LiveOrdersPage() {
 
     setIsSavingEdit(true);
     try {
+      const token = sessionStorage.getItem('anbar_kitchen_token');
       const res = await fetch('/api/orders', {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({
           id: editingOrder.id,
           items: editingItems,

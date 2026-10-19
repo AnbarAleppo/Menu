@@ -3,6 +3,7 @@ import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient';
 import { getServiceSupabase } from '@/lib/supabaseServer';
 import { INITIAL_MENU_ITEMS } from '@/lib/initialData';
 import { MenuItem } from '@/lib/types';
+import { verifyAdminRequest } from '@/lib/auth';
 
 export async function GET(req: NextRequest) {
   try {
@@ -43,6 +44,11 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    // CRITICAL SECURITY FIX: Only authorized admin can add menu items
+    if (!verifyAdminRequest(req)) {
+      return NextResponse.json({ error: 'غير مصرح لك بإضافة أطباق' }, { status: 401 });
+    }
+
     const serverSupabase = getServiceSupabase();
     if (!serverSupabase) {
       return NextResponse.json({ error: 'Supabase is not configured' }, { status: 400 });
@@ -77,12 +83,17 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ data });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return NextResponse.json({ error: 'حدث خطأ في إضافة الطبق' }, { status: 500 });
   }
 }
 
 export async function PUT(req: NextRequest) {
   try {
+    // CRITICAL SECURITY FIX: Only authorized admin can modify menu items
+    if (!verifyAdminRequest(req)) {
+      return NextResponse.json({ error: 'غير مصرح لك بتعديل الأطباق' }, { status: 401 });
+    }
+
     const serverSupabase = getServiceSupabase();
     if (!serverSupabase) {
       return NextResponse.json({ error: 'Supabase is not configured' }, { status: 400 });
@@ -117,12 +128,17 @@ export async function PUT(req: NextRequest) {
 
     return NextResponse.json({ data });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return NextResponse.json({ error: 'حدث خطأ في تعديل الطبق' }, { status: 500 });
   }
 }
 
 export async function DELETE(req: NextRequest) {
   try {
+    // CRITICAL SECURITY FIX: Only authorized admin can delete menu items
+    if (!verifyAdminRequest(req)) {
+      return NextResponse.json({ error: 'غير مصرح لك بحذف الأطباق' }, { status: 401 });
+    }
+
     const serverSupabase = getServiceSupabase();
     if (!serverSupabase) {
       return NextResponse.json({ error: 'Supabase is not configured' }, { status: 400 });
@@ -132,7 +148,7 @@ export async function DELETE(req: NextRequest) {
     const id = searchParams.get('id');
 
     if (!id) {
-      return NextResponse.json({ error: 'Missing dish id' }, { status: 400 });
+      return NextResponse.json({ error: 'معرف الطبق مطلوب' }, { status: 400 });
     }
 
     const { error } = await serverSupabase
@@ -146,13 +162,18 @@ export async function DELETE(req: NextRequest) {
 
     return NextResponse.json({ success: true });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return NextResponse.json({ error: 'حدث خطأ في الحذف' }, { status: 500 });
   }
 }
 
 // BATCH REORDER MENU ITEMS
 export async function PATCH(req: NextRequest) {
   try {
+    // CRITICAL SECURITY FIX: Only authorized admin can reorder menu items
+    if (!verifyAdminRequest(req)) {
+      return NextResponse.json({ error: 'غير مصرح لك بإعادة ترتيب الأطباق' }, { status: 401 });
+    }
+
     const serverSupabase = getServiceSupabase();
     if (!serverSupabase) {
       return NextResponse.json({ error: 'Supabase is not configured' }, { status: 400 });
@@ -173,6 +194,6 @@ export async function PATCH(req: NextRequest) {
 
     return NextResponse.json({ success: true });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return NextResponse.json({ error: 'حدث خطأ في إعادة الترتيب' }, { status: 500 });
   }
 }

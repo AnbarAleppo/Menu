@@ -45,7 +45,7 @@ import { getSupabaseClient, isSupabaseConfigured } from '@/lib/supabaseClient';
 export default function AdminDashboardPage() {
   // Admin Auth State
   const [isAdminLoggedIn, setIsAdminLoggedIn] = useState<boolean>(false);
-  const [adminEmail, setAdminEmail] = useState<string>('admin@anbar.com');
+  const [adminEmail, setAdminEmail] = useState<string>('');
   const [adminPassword, setAdminPassword] = useState<string>('');
   const [authError, setAuthError] = useState<string | null>(null);
   const [isLoggingIn, setIsLoggingIn] = useState<boolean>(false);
@@ -82,18 +82,40 @@ export default function AdminDashboardPage() {
     setTimeout(() => setToastMessage(null), 3200);
   };
 
+  const getAdminHeaders = (extra: Record<string, string> = {}) => {
+    const token = typeof window !== 'undefined' ? sessionStorage.getItem('anbar_admin_token') : null;
+    return {
+      ...extra,
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    };
+  };
+
   // Check admin session
   useEffect(() => {
-    const session = sessionStorage.getItem('anbar_admin_auth');
-    if (session === 'true') {
-      setIsAdminLoggedIn(true);
+    const token = sessionStorage.getItem('anbar_admin_token');
+    if (token) {
+      fetch('/api/auth/me', {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+        .then((r) => r.json())
+        .then((data) => {
+          if (data.authenticated && data.role === 'admin') {
+            setIsAdminLoggedIn(true);
+          } else {
+            sessionStorage.removeItem('anbar_admin_token');
+            sessionStorage.removeItem('anbar_admin_auth');
+          }
+        })
+        .catch(() => {});
     }
   }, []);
 
   // Fetch Settings (PIN code)
   const fetchSettings = async () => {
     try {
-      const res = await fetch('/api/settings?key=kitchen_pin');
+      const res = await fetch('/api/settings?key=kitchen_pin', {
+        headers: getAdminHeaders(),
+      });
       if (res.ok) {
         const data = await res.json();
         if (data.value) {
@@ -144,57 +166,44 @@ export default function AdminDashboardPage() {
     }
   }, [isAdminLoggedIn]);
 
-  // Handle Admin Login
+  // Handle Admin Login via Secure Server Endpoint
   const handleAdminLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoggingIn(true);
     setAuthError(null);
 
     try {
-      const supabase = getSupabaseClient();
-      let loggedIn = false;
+      const res = await fetch('/api/auth/admin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: adminEmail, password: adminPassword }),
+      });
 
-      // Try Supabase Auth if configured
-      if (supabase) {
-        try {
-          const { data, error } = await supabase.auth.signInWithPassword({
-            email: adminEmail,
-            password: adminPassword,
-          });
-          if (data?.session && !error) {
-            loggedIn = true;
-          }
-        } catch (supabaseErr) {
-          console.warn('Supabase auth attempt:', supabaseErr);
-        }
-      }
+      const data = await res.json();
 
-      // Default Admin Fallback Credentials for immediate easy access
-      if (!loggedIn) {
-        if (
-          (adminEmail.toLowerCase() === 'admin@anbar.com' || adminEmail.toLowerCase() === 'admin') &&
-          (adminPassword === 'admin1234' || adminPassword === '123456' || adminPassword === 'anbar2026' || adminPassword === 'admin')
-        ) {
-          loggedIn = true;
-        }
-      }
-
-      if (loggedIn) {
+      if (res.ok && data.success) {
         setIsAdminLoggedIn(true);
-        sessionStorage.setItem('anbar_admin_auth', 'true');
+        if (data.token) {
+          sessionStorage.setItem('anbar_admin_token', data.token);
+          sessionStorage.setItem('anbar_admin_auth', 'true');
+        }
         showToast('تم تسجيل الدخول بنجاح! أهلاً بك في لوحة الإدارة');
       } else {
-        setAuthError('البريد الإلكتروني أو كلمة المرور غير صحيحة. (الافتراضي: admin@anbar.com / admin1234)');
+        setAuthError(data.error || 'البريد الإلكتروني أو كلمة المرور غير صحيحة');
       }
     } catch (err: any) {
-      setAuthError(err.message || 'فشل تسجيل الدخول');
+      setAuthError('تعذر الاتصال بالخادم، يرجى المحاولة ثانية');
     } finally {
       setIsLoggingIn(false);
     }
   };
 
-  const handleAdminLogout = () => {
+  const handleAdminLogout = async () => {
+    try {
+      await fetch('/api/auth/me', { method: 'POST' });
+    } catch {}
     sessionStorage.removeItem('anbar_admin_auth');
+    sessionStorage.removeItem('anbar_admin_token');
     setIsAdminLoggedIn(false);
     setAdminPassword('');
     showToast('تم تسجيل الخروج 🔒');
@@ -212,7 +221,7 @@ export default function AdminDashboardPage() {
     try {
       const res = await fetch('/api/settings', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAdminHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ key: 'kitchen_pin', value: newPinInput }),
       });
 
@@ -242,7 +251,7 @@ export default function AdminDashboardPage() {
 
       const res = await fetch('/api/menu', {
         method,
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAdminHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify(editingDish),
       });
 
@@ -267,6 +276,7 @@ export default function AdminDashboardPage() {
     try {
       const res = await fetch(`/api/menu?id=${id}`, {
         method: 'DELETE',
+        headers: getAdminHeaders(),
       });
 
       if (res.ok) {
@@ -286,7 +296,7 @@ export default function AdminDashboardPage() {
     try {
       const res = await fetch('/api/menu', {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAdminHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify(updated),
       });
 
@@ -320,7 +330,7 @@ export default function AdminDashboardPage() {
     try {
       await fetch('/api/menu', {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAdminHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
           items: updatedWithOrder.map((i) => ({ id: i.id, sort_order: i.sort_order })),
         }),
@@ -364,7 +374,7 @@ export default function AdminDashboardPage() {
     try {
       await fetch('/api/menu', {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAdminHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
           items: updatedWithOrder.map((i) => ({ id: i.id, sort_order: i.sort_order })),
         }),
@@ -388,7 +398,7 @@ export default function AdminDashboardPage() {
 
       const res = await fetch('/api/categories', {
         method,
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAdminHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify(editingCategory),
       });
 
@@ -423,6 +433,7 @@ export default function AdminDashboardPage() {
     try {
       const res = await fetch(`/api/categories?slug=${slug}`, {
         method: 'DELETE',
+        headers: getAdminHeaders(),
       });
 
       if (res.ok) {
@@ -444,7 +455,7 @@ export default function AdminDashboardPage() {
     try {
       const res = await fetch('/api/categories', {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAdminHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify(updated),
       });
 
@@ -478,7 +489,7 @@ export default function AdminDashboardPage() {
     try {
       await fetch('/api/categories', {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAdminHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
           items: updatedWithOrder.map((c) => ({ slug: c.slug, sort_order: c.sort_order })),
         }),
@@ -522,7 +533,7 @@ export default function AdminDashboardPage() {
     try {
       await fetch('/api/categories', {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAdminHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
           items: updatedWithOrder.map((c) => ({ slug: c.slug, sort_order: c.sort_order })),
         }),
@@ -542,7 +553,6 @@ export default function AdminDashboardPage() {
       ingredients: '',
       pairing: '',
       image_url: 'https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=700&q=80',
-      badge: '',
       tags: [],
       is_available: true,
       is_featured: false,
@@ -892,11 +902,6 @@ export default function AdminDashboardPage() {
                                 <div>
                                   <div className="font-bold text-anbar-dark flex items-center gap-1.5">
                                     <span>{dish.title}</span>
-                                    {dish.badge && (
-                                      <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-anbar-amber/20 text-anbar-rust">
-                                        {dish.badge}
-                                      </span>
-                                    )}
                                   </div>
                                   <p className="text-[11px] text-anbar-dark/50 truncate max-w-xs">{dish.description}</p>
                                 </div>
@@ -1244,28 +1249,15 @@ export default function AdminDashboardPage() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block font-bold text-anbar-dark mb-1">السعر (ل.س) *</label>
-                      <input
-                        type="number"
-                        required
-                        value={editingDish.price ?? 0}
-                        onChange={(e) => setEditingDish({ ...editingDish, price: Number(e.target.value) })}
-                        className="w-full px-3.5 py-2.5 bg-anbar-bg border border-anbar-subtle rounded-2xl font-bold focus:outline-none focus:border-anbar-amber"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block font-bold text-anbar-dark mb-1">الشارة المميزة (Badge)</label>
-                      <input
-                        type="text"
-                        value={editingDish.badge || ''}
-                        onChange={(e) => setEditingDish({ ...editingDish, badge: e.target.value })}
-                        className="w-full px-3.5 py-2.5 bg-anbar-bg border border-anbar-subtle rounded-2xl font-bold focus:outline-none focus:border-anbar-amber"
-                        placeholder="مثال: الأكثر طلباً، توقيع عنبر"
-                      />
-                    </div>
+                  <div>
+                    <label className="block font-bold text-anbar-dark mb-1">السعر (ل.س) *</label>
+                    <input
+                      type="number"
+                      required
+                      value={editingDish.price ?? 0}
+                      onChange={(e) => setEditingDish({ ...editingDish, price: Number(e.target.value) })}
+                      className="w-full px-3.5 py-2.5 bg-anbar-bg border border-anbar-subtle rounded-2xl font-bold focus:outline-none focus:border-anbar-amber"
+                    />
                   </div>
 
                   <div>
@@ -1278,30 +1270,6 @@ export default function AdminDashboardPage() {
                       className="w-full px-3.5 py-2.5 bg-anbar-bg border border-anbar-subtle rounded-2xl font-medium focus:outline-none focus:border-anbar-amber"
                       placeholder="وصف مشهي للطبق ومذاقه..."
                     />
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block font-bold text-anbar-dark mb-1">المكونات التفصيلية</label>
-                      <input
-                        type="text"
-                        value={editingDish.ingredients || ''}
-                        onChange={(e) => setEditingDish({ ...editingDish, ingredients: e.target.value })}
-                        className="w-full px-3.5 py-2.5 bg-anbar-bg border border-anbar-subtle rounded-2xl font-medium focus:outline-none focus:border-anbar-amber"
-                        placeholder="المكونات مفصولة بفواصل"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block font-bold text-anbar-dark mb-1">اقتراح التناغم (Pairing)</label>
-                      <input
-                        type="text"
-                        value={editingDish.pairing || ''}
-                        onChange={(e) => setEditingDish({ ...editingDish, pairing: e.target.value })}
-                        className="w-full px-3.5 py-2.5 bg-anbar-bg border border-anbar-subtle rounded-2xl font-medium focus:outline-none focus:border-anbar-amber"
-                        placeholder="مثال: يُفضل مع موهيتو بارد"
-                      />
-                    </div>
                   </div>
 
                   <div>
@@ -1320,16 +1288,6 @@ export default function AdminDashboardPage() {
                         className="w-4 h-4 rounded text-anbar-amber focus:ring-anbar-amber"
                       />
                       <span>متوفر في القائمة للطلب</span>
-                    </label>
-
-                    <label className="flex items-center gap-2 cursor-pointer font-bold">
-                      <input
-                        type="checkbox"
-                        checked={editingDish.is_featured ?? false}
-                        onChange={(e) => setEditingDish({ ...editingDish, is_featured: e.target.checked })}
-                        className="w-4 h-4 rounded text-anbar-amber focus:ring-anbar-amber"
-                      />
-                      <span>تمييز في الواجهة (Featured)</span>
                     </label>
                   </div>
 
@@ -1412,6 +1370,34 @@ export default function AdminDashboardPage() {
                       className="w-full px-3.5 py-2.5 bg-anbar-bg border border-anbar-subtle rounded-2xl font-mono font-bold focus:outline-none focus:border-anbar-amber"
                       placeholder="special-coffee"
                     />
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-anbar-dark mb-1">القسم الرئيسي في المنيو *</label>
+                    <div className="grid grid-cols-2 gap-2 p-1 bg-anbar-bg rounded-2xl border border-anbar-subtle">
+                      <button
+                        type="button"
+                        onClick={() => setEditingCategory({ ...editingCategory, section: 'food' })}
+                        className={`py-2 px-3 rounded-xl font-bold text-xs transition-all cursor-pointer ${
+                          (editingCategory.section ?? 'food') === 'food'
+                            ? 'bg-anbar-dark text-white shadow-xs'
+                            : 'text-anbar-dark/70 hover:bg-white/60'
+                        }`}
+                      >
+                        🍽️ المأكولات
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEditingCategory({ ...editingCategory, section: 'drinks' })}
+                        className={`py-2 px-3 rounded-xl font-bold text-xs transition-all cursor-pointer ${
+                          editingCategory.section === 'drinks'
+                            ? 'bg-anbar-dark text-white shadow-xs'
+                            : 'text-anbar-dark/70 hover:bg-white/60'
+                        }`}
+                      >
+                        ☕ المشروبات
+                      </button>
+                    </div>
                   </div>
 
                   <div className="flex items-center gap-2 pt-2">

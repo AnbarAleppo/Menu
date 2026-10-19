@@ -1,10 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServiceSupabase } from '@/lib/supabaseServer';
+import { verifyAdminRequest } from '@/lib/auth';
 
 const BUCKET_NAME = process.env.NEXT_PUBLIC_SUPABASE_STORAGE_BUCKET || 'anbar-assets';
+const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+const ALLOWED_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/jpg']);
 
 export async function POST(req: NextRequest) {
   try {
+    // CRITICAL SECURITY FIX: Only authorized admin can upload assets
+    if (!verifyAdminRequest(req)) {
+      return NextResponse.json({ error: 'غير مصرح لك برفع الصور' }, { status: 401 });
+    }
+
     const serverSupabase = getServiceSupabase();
     if (!serverSupabase) {
       return NextResponse.json(
@@ -20,9 +28,22 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'لم يتم اختيار ملف' }, { status: 400 });
     }
 
-    // Generate unique filename with original extension
-    const extension = file.name.split('.').pop() || 'jpg';
-    const filename = `dish-${Date.now()}-${Math.random().toString(36).substring(2, 8)}.${extension}`;
+    // Validate file size
+    if (file.size > MAX_FILE_SIZE) {
+      return NextResponse.json({ error: 'حجم الصورة يتجاوز الحد المسموح به (5 ميغابايت)' }, { status: 400 });
+    }
+
+    // Validate MIME type
+    if (!ALLOWED_MIME_TYPES.has(file.type.toLowerCase())) {
+      return NextResponse.json({ error: 'نوع الملف غير مدعوم، يرجى رفع صورة فقط (WebP, JPG, PNG)' }, { status: 400 });
+    }
+
+    // Ensure extension is webp
+    const originalExt = file.name.split('.').pop()?.toLowerCase();
+    const isWebp = originalExt === 'webp' || file.type === 'image/webp';
+    const extension = isWebp ? 'webp' : (originalExt || 'webp');
+    const safeBaseName = file.name.replace(/[^a-zA-Z0-9_-]/g, '').substring(0, 20);
+    const filename = `dish-${Date.now()}-${safeBaseName || 'img'}.${extension}`;
     const filePath = `dishes/${filename}`;
 
     const buffer = Buffer.from(await file.arrayBuffer());
@@ -31,7 +52,7 @@ export async function POST(req: NextRequest) {
     const { data: uploadData, error: uploadError } = await serverSupabase.storage
       .from(BUCKET_NAME)
       .upload(filePath, buffer, {
-        contentType: file.type || 'image/jpeg',
+        contentType: isWebp ? 'image/webp' : (file.type || 'image/webp'),
         upsert: true,
       });
 
@@ -53,6 +74,6 @@ export async function POST(req: NextRequest) {
     });
   } catch (err: any) {
     console.error('Upload handler exception:', err);
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return NextResponse.json({ error: 'حدث خطأ في معالجة الملف' }, { status: 500 });
   }
 }

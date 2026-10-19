@@ -8,7 +8,7 @@ interface FooterProps {
   onShowToast?: (msg: string) => void;
 }
 
-export default function Footer({}: FooterProps) {
+export default function Footer({ }: FooterProps) {
   return (
     <footer className="bg-anbar-dark text-white pt-16 pb-12 relative overflow-hidden mt-16">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
@@ -24,7 +24,7 @@ export default function Footer({}: FooterProps) {
               />
             </div>
             <p className="text-xs text-white/60 leading-relaxed font-medium max-w-sm">
-              مطبخ عصري ومساحة هادئة لتناول الأطعمة الصحية والمشروبات الدافئة تحت شمس الطبيعة.
+              عنبر هو وجهتك الأولى للوجبات السريعة المحضرة بشغف، نكهات غنية، قرمشة لا تُقاوم، وتجربة طعام استثنائية تأتيك بأعلى جودة وأسرع وقت.
             </p>
           </div>
 
@@ -52,11 +52,6 @@ export default function Footer({}: FooterProps) {
 
         <div className="pt-8 flex flex-col sm:flex-row justify-between items-center gap-4 text-xs text-white/40 font-medium">
           <p>© 2026 Anbar. جميع الحقوق محفوظة.</p>
-          <div className="flex gap-6">
-            <a href="#" className="hover:text-white transition-colors">إنستغرام</a>
-            <a href="#" className="hover:text-white transition-colors">موقعنا</a>
-            <a href="#" className="hover:text-white transition-colors">سياسة الخصوصية</a>
-          </div>
         </div>
       </div>
     </footer>

@@ -7,17 +7,16 @@ import {
   ShoppingBag,
   Plus,
   Minus,
-  Check,
+  CheckCircle2,
   Trash2,
-  Send,
-  QrCode,
-  MapPin,
   Clock,
   History,
-  AlertCircle,
-  RotateCcw
+  RotateCcw,
+  Receipt,
+  ArrowRight,
+  Sparkles
 } from 'lucide-react';
-import { CartItem, MenuItem } from '@/lib/types';
+import { CartItem } from '@/lib/types';
 import {
   saveCustomerOrderToStorage,
   getCustomerOrdersFromStorage,
@@ -28,8 +27,8 @@ interface CartDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   cart: CartItem[];
-  tableNumber: string;
-  onTableNumberChange: (tbl: string) => void;
+  tableNumber?: string;
+  onTableNumberChange?: (tbl: string) => void;
   isQrDetected?: boolean;
   onUpdateCartQty: (itemId: string, delta: number) => void;
   onClearCart: () => void;
@@ -43,7 +42,7 @@ export default function CartDrawer({
   cart,
   tableNumber,
   onTableNumberChange,
-  isQrDetected = false,
+  isQrDetected,
   onUpdateCartQty,
   onClearCart,
   onOrderSuccess,
@@ -64,64 +63,45 @@ export default function CartDrawer({
 
   const total = cart.reduce((sum, item) => sum + item.price * item.qty, 0);
 
-  const handleCheckout = async () => {
+  const handleConfirmOrder = async () => {
     if (cart.length === 0) return;
 
     setIsSubmitting(true);
     try {
-      const res = await fetch('/api/orders', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          table_number: tableNumber || 'طاولة عامة',
-          items: cart,
-          total,
-          notes,
-        }),
-      });
+      const resolvedTable = tableNumber && tableNumber.trim() ? tableNumber.trim() : 'طلب مباشر';
+      const orderDataToSave = {
+        id: `order-${Date.now()}`,
+        order_number: Math.floor(1000 + Math.random() * 9000),
+        table_number: resolvedTable,
+        items: [...cart],
+        total,
+        notes,
+        status: 'new' as const,
+      };
 
-      const data = await res.json();
+      // Also attempt background sync if API is available
+      try {
+        await fetch('/api/orders', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(orderDataToSave),
+        });
+      } catch (e) {
+        // Safe offline fallback
+      }
 
       // Save order to browser storage for 4 hours
-      const saved = saveCustomerOrderToStorage({
-        id: data?.data?.id || `order-${Date.now()}`,
-        order_number: data?.data?.order_number,
-        table_number: tableNumber || 'طاولة عامة',
-        items: [...cart],
-        total,
-        notes,
-        status: 'new',
-      });
+      saveCustomerOrderToStorage(orderDataToSave);
 
-      setRecentOrders(getCustomerOrdersFromStorage());
+      const updatedOrders = getCustomerOrdersFromStorage();
+      setRecentOrders(updatedOrders);
 
-      if (res.ok) {
-        onOrderSuccess(data);
-        onClearCart();
-        setNotes('');
-        setActiveTab('history'); // Show the saved order tab
-      } else {
-        // Fallback save in local mode
-        onOrderSuccess({ message: 'تم إرسال الطلب وحفظه بذاكرة المتصفح' });
-        onClearCart();
-        setNotes('');
-        setActiveTab('history');
-      }
-    } catch (err) {
-      console.error('Order submit error:', err);
-      // Offline fallback: save order locally for 4 hours
-      saveCustomerOrderToStorage({
-        table_number: tableNumber || 'طاولة عامة',
-        items: [...cart],
-        total,
-        notes,
-        status: 'new',
-      });
-      setRecentOrders(getCustomerOrdersFromStorage());
-      onOrderSuccess({ message: 'تم إرسال الطلب وحفظه في الذاكرة' });
+      onOrderSuccess({ message: 'تم تثبيت الطلب! يرجى التوجه إلى الكاش لتثبيت طلباتك' });
       onClearCart();
       setNotes('');
-      setActiveTab('history');
+      setActiveTab('history'); // Show the confirmed orders tab immediately
+    } catch (err) {
+      console.error('Order confirm error:', err);
     } finally {
       setIsSubmitting(false);
     }
@@ -152,7 +132,7 @@ export default function CartDrawer({
               </div>
               <div>
                 <h3 className="font-cairo font-black text-base text-anbar-dark">طلبات مطعم عنبر</h3>
-                <p className="text-[11px] text-anbar-dark/55 font-medium">إدارة السلة ومراجعة الطلبات السابقة</p>
+                <p className="text-[11px] text-anbar-dark/55 font-medium">سلة الأطباق وتثبيت الطلب</p>
               </div>
             </div>
             <button
@@ -163,7 +143,7 @@ export default function CartDrawer({
             </button>
           </div>
 
-          {/* Navigation Tabs: Current Cart vs 4-Hour Stored Orders */}
+          {/* Navigation Tabs: Current Cart vs Confirmed Orders */}
           <div className="grid grid-cols-2 gap-2 bg-white/80 p-1 rounded-2xl border border-anbar-subtle shadow-2xs">
             <button
               onClick={() => setActiveTab('cart')}
@@ -183,8 +163,8 @@ export default function CartDrawer({
                   : 'text-anbar-dark/70 hover:text-anbar-dark'
                 }`}
             >
-              <History className="w-3.5 h-3.5 text-anbar-amber" />
-              <span>طلباتك السابقة ({recentOrders.length})</span>
+              <Receipt className="w-3.5 h-3.5 text-anbar-amber" />
+              <span>طلباتك المثبتة ({recentOrders.length})</span>
             </button>
           </div>
         </div>
@@ -200,15 +180,15 @@ export default function CartDrawer({
                   <ShoppingBag className="w-12 h-12 mx-auto mb-2.5 text-anbar-slate/40" />
                   <p className="text-xs font-bold text-anbar-dark">سلة الطلب الحالية فارغة</p>
                   <p className="text-[11px] text-anbar-dark/50 mt-1 max-w-xs mx-auto">
-                    تصفح قائمة الطعام وأضف ما تشتهي من الأطباق والمشروبات لإرسالها مباشرة للمطبخ.
+                    تصفح قائمة الطعام وأضف ما تشتهي من الأطباق والمشروبات ثم انقر على تثبيت الطلب.
                   </p>
                   {recentOrders.length > 0 && (
                     <button
                       onClick={() => setActiveTab('history')}
                       className="mt-4 px-4 py-2 rounded-full bg-anbar-amber/15 border border-anbar-amber/30 text-anbar-rust text-xs font-black hover:bg-anbar-amber hover:text-white transition-all inline-flex items-center gap-1.5"
                     >
-                      <History className="w-3.5 h-3.5" />
-                      <span>عرض طلباتك المرسلة ({recentOrders.length})</span>
+                      <Receipt className="w-3.5 h-3.5" />
+                      <span>عرض طلباتك المثبتة ({recentOrders.length})</span>
                     </button>
                   )}
                 </div>
@@ -233,7 +213,7 @@ export default function CartDrawer({
                           {item.title}
                         </h4>
                         <span className="text-[11px] text-anbar-dark/50 font-medium">
-                          {item.price.toLocaleString('ar-SY')} ل.س للطبق
+                          {item.price.toLocaleString('ar-SY')} ل.س للواحد
                         </span>
                       </div>
                     </div>
@@ -265,52 +245,30 @@ export default function CartDrawer({
                 ))
               )}
 
-              {/* Table Selection & Notes */}
+              {/* Notes */}
               {cart.length > 0 && (
                 <div className="mt-4 pt-4 border-t border-anbar-subtle space-y-3">
-                  <div className="flex items-center justify-between p-3 rounded-2xl bg-anbar-bg border border-anbar-subtle">
-                    <div className="flex items-center gap-2">
-                      <MapPin className="w-4 h-4 text-anbar-rust" />
-                      <span className="text-xs font-bold text-anbar-dark">رقم الطاولة:</span>
-                    </div>
-
-                    {isQrDetected ? (
-                      <div className="flex items-center gap-1.5 px-3 py-1 bg-emerald-50 border border-emerald-300 rounded-full text-emerald-800 text-xs font-black">
-                        <QrCode className="w-3.5 h-3.5 text-emerald-600" />
-                        <span>{tableNumber} (تلقائي عبر QR)</span>
-                      </div>
-                    ) : (
-                      <input
-                        type="text"
-                        value={tableNumber}
-                        onChange={(e) => onTableNumberChange(e.target.value)}
-                        placeholder="مثال: طاولة رقم 4"
-                        className="text-xs font-bold text-left px-3 py-1 bg-white border border-anbar-subtle rounded-xl focus:outline-none focus:border-anbar-amber w-36"
-                      />
-                    )}
-                  </div>
-
                   <div>
                     <label className="block text-xs font-bold text-anbar-dark/70 mb-1">
-                      ملاحظات خاصة للمطبخ (اختياري):
+                      ملاحظات خاصة (اختياري):
                     </label>
                     <input
                       type="text"
                       value={notes}
                       onChange={(e) => setNotes(e.target.value)}
-                      placeholder="مثال: بدون بصل، زيادة ليمون..."
-                      className="w-full px-3.5 py-2 rounded-xl border border-anbar-subtle text-xs bg-anbar-bg focus:outline-none focus:border-anbar-amber font-medium"
+                      placeholder="مثال: بدون سكر، زيادة ثوم، تسخين خفيف..."
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-anbar-subtle text-xs bg-anbar-bg focus:outline-none focus:border-anbar-amber font-medium"
                     />
                   </div>
                 </div>
               )}
             </div>
 
-            {/* Current Cart Footer */}
+            {/* Current Cart Footer with 'تثبيت الطلب' */}
             {cart.length > 0 && (
               <div className="p-5 border-t border-anbar-subtle bg-white space-y-3 font-medium">
                 <div className="flex justify-between items-center text-sm font-bold text-anbar-dark">
-                  <span>الإجمالي</span>
+                  <span>الإجمالي الكلي</span>
                   <span className="text-lg font-black text-anbar-rust">
                     {total.toLocaleString('ar-SY')} ل.س
                   </span>
@@ -318,16 +276,16 @@ export default function CartDrawer({
 
                 <div className="flex gap-2">
                   <button
-                    onClick={handleCheckout}
+                    onClick={handleConfirmOrder}
                     disabled={isSubmitting}
                     className="flex-1 py-3.5 rounded-2xl bg-anbar-dark text-white font-bold text-xs hover:bg-anbar-rust transition-all shadow-md flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
                   >
                     {isSubmitting ? (
-                      <span>جاري إرسال الطلب...</span>
+                      <span>جاري تثبيت الطلب...</span>
                     ) : (
                       <>
-                        <span>إرسال الطلب إلى {tableNumber || 'المطبخ'}</span>
-                        <Send className="w-3.5 h-3.5" />
+                        <CheckCircle2 className="w-4 h-4 text-anbar-amber" />
+                        <span className="text-sm font-extrabold">تثبيت الطلب</span>
                       </>
                     )}
                   </button>
@@ -345,34 +303,42 @@ export default function CartDrawer({
         )}
 
         {/* ========================================================================= */}
-        {/* TAB 2: 4-HOUR SAVED RECENT ORDERS */}
+        {/* TAB 2: CONFIRMED ORDERS & CASHIER NOTICE */}
         {/* ========================================================================= */}
         {activeTab === 'history' && (
           <div className="flex-1 overflow-y-auto p-5 space-y-4">
-            {/* Info Notice about the 4-Hour browser cache */}
-            <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-900 text-xs font-medium flex items-start gap-2.5">
-              <Clock className="w-4 h-4 text-anbar-amber shrink-0 mt-0.5" />
-              <div>
-                <span className="font-bold block">سجل طلباتك</span>
-                <span className="text-[11px] text-amber-900/80 leading-relaxed block mt-0.5">
-                  يتم الاحتفاظ بجميع طلباتك في ذاكرة هذا الجهاز لمدة 4 ساعات ليتسنى لك مراجعتها والتأكد من تفاصيلها مع النادل في حال وجود أي استفسار أو خطأ.
-                </span>
+            {/* Prominent Cashier Notice Banner */}
+            <div className="p-4 rounded-3xl bg-gradient-to-br from-amber-500/15 via-anbar-amber/20 to-amber-500/10 border-2 border-anbar-amber/50 text-anbar-dark space-y-2 text-center shadow-soft animate-in fade-in zoom-in-95 duration-200">
+              <div className="w-12 h-12 rounded-full bg-anbar-amber text-anbar-dark mx-auto flex items-center justify-center font-black shadow-md">
+                <Receipt className="w-6 h-6" />
               </div>
+              <h4 className="font-cairo font-black text-base text-anbar-dark">
+                توجه إلى الكاش لتثبيت طلباتك
+              </h4>
+              <p className="text-xs text-anbar-dark/80 font-medium leading-relaxed">
+                يرجى التوجه إلى نقطة المحاسبة (الكاش) وإظهار طلبك لتأكيد التجهيز فوراً ودفع الحساب.
+              </p>
+            </div>
+
+            {/* Info Notice about the 1-Hour browser cache */}
+            <div className="p-3 rounded-2xl bg-white border border-anbar-subtle text-anbar-dark/70 text-[11px] font-medium flex items-center gap-2 shadow-2xs">
+              <Clock className="w-4 h-4 text-anbar-amber shrink-0" />
+              <span>تُحفظ كافة تفاصيل طلباتك هنا لمدة ساعة واحدة لسهولة المراجعة.</span>
             </div>
 
             {recentOrders.length === 0 ? (
-              <div className="text-center py-16 text-anbar-dark/50">
+              <div className="text-center py-12 text-anbar-dark/50">
                 <History className="w-12 h-12 mx-auto mb-2 text-anbar-slate/40" />
-                <p className="text-xs font-bold text-anbar-dark">لا توجد طلبات سابقة مسجلة خلال الـ 4 ساعات</p>
+                <p className="text-xs font-bold text-anbar-dark">لا توجد طلبات مثبتة حالياً</p>
                 <p className="text-[11px] text-anbar-dark/50 mt-1 max-w-xs mx-auto">
-                  بمجرد إرسالك أي طلب، ستجده محفوظاً هنا فوراً مع تفاصيل الأصناف والوقت المتبقي.
+                  اختر أطباقك من القائمة واضغط على "تثبيت الطلب" لتظهر كافة تفاصيلها هنا.
                 </p>
               </div>
             ) : (
               recentOrders.map((order, idx) => (
                 <div
                   key={order.id || idx}
-                  className="p-4 rounded-3xl bg-anbar-bg border border-anbar-subtle shadow-2xs space-y-3"
+                  className="p-4 rounded-3xl bg-anbar-bg border border-anbar-subtle shadow-2xs space-y-3.5"
                 >
                   {/* Order Header */}
                   <div className="flex items-center justify-between border-b border-anbar-subtle pb-2.5">
@@ -381,11 +347,12 @@ export default function CartDrawer({
                         <span className="font-cairo font-black text-xs text-anbar-dark">
                           طلب #{order.order_number || (order.id ? String(order.id).slice(-4) : idx + 1)}
                         </span>
-                        <span className="px-2 py-0.5 rounded-full bg-anbar-dark text-white text-[10px] font-bold">
-                          📍 {order.table_number}
+                        <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-black border border-emerald-300 flex items-center gap-1">
+                          <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                          مثبت بانتظار الكاش
                         </span>
                       </div>
-                      <span className="text-[10px] text-anbar-dark/50 font-medium block mt-0.5">
+                      <span className="text-[10px] text-anbar-dark/50 font-medium block mt-1">
                         {new Date(order.timestamp).toLocaleTimeString('ar-SY', {
                           hour: '2-digit',
                           minute: '2-digit',
@@ -394,26 +361,29 @@ export default function CartDrawer({
                     </div>
                   </div>
 
-                  {/* Items List */}
-                  <div className="space-y-1.5 text-xs">
-                    {order.items.map((item, i) => (
-                      <div key={i} className="flex items-center justify-between text-anbar-dark/80">
-                        <div className="flex items-center gap-2">
-                          <span className="w-5 h-5 rounded-full bg-anbar-amber/20 text-anbar-rust text-[10px] font-black flex items-center justify-center">
-                            {item.qty}×
+                  {/* Complete Items Breakdown */}
+                  <div className="space-y-2">
+                    <p className="text-[11px] font-bold text-anbar-dark/70">تفاصيل الأصناف ({order.items.reduce((s, i) => s + (i.qty || 1), 0)}):</p>
+                    <div className="space-y-1.5 bg-white p-3 rounded-2xl border border-anbar-subtle">
+                      {order.items.map((item, i) => (
+                        <div key={i} className="flex items-center justify-between text-xs py-1 border-b border-anbar-subtle/50 last:border-0">
+                          <div className="flex items-center gap-2">
+                            <span className="w-5 h-5 rounded-full bg-anbar-amber/20 text-anbar-rust text-[10px] font-black flex items-center justify-center shrink-0">
+                              {item.qty}×
+                            </span>
+                            <span className="font-bold text-xs text-anbar-dark">{item.title}</span>
+                          </div>
+                          <span className="font-bold text-xs text-anbar-rust shrink-0">
+                            {((item.price || 0) * (item.qty || 1)).toLocaleString('ar-SY')} ل.س
                           </span>
-                          <span className="font-bold text-[11px] text-anbar-dark">{item.title}</span>
                         </div>
-                        <span className="font-medium text-[11px] text-anbar-dark/60">
-                          {((item.price || 0) * (item.qty || 1)).toLocaleString('ar-SY')} ل.س
-                        </span>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
 
                   {/* Notes if any */}
                   {order.notes && (
-                    <div className="text-[11px] p-2 rounded-xl bg-white border border-anbar-subtle text-anbar-dark/70">
+                    <div className="text-[11px] p-2.5 rounded-xl bg-white border border-anbar-subtle text-anbar-dark/80">
                       <strong className="text-anbar-dark">الملاحظات:</strong> {order.notes}
                     </div>
                   )}
@@ -421,8 +391,8 @@ export default function CartDrawer({
                   {/* Order Total & Reorder Button */}
                   <div className="flex items-center justify-between pt-2 border-t border-anbar-subtle">
                     <div className="text-xs font-bold text-anbar-dark">
-                      <span>الإجمالي: </span>
-                      <span className="font-black text-anbar-rust text-sm">
+                      <span>الإجمالي للحساب: </span>
+                      <span className="font-black text-anbar-rust text-base">
                         {order.total.toLocaleString('ar-SY')} ل.س
                       </span>
                     </div>
@@ -433,10 +403,10 @@ export default function CartDrawer({
                           onReorderItems(order.items);
                           setActiveTab('cart');
                         }}
-                        className="px-3 py-1 rounded-full bg-white border border-anbar-subtle text-anbar-dark hover:border-anbar-amber hover:text-anbar-amber text-[11px] font-bold transition-all flex items-center gap-1 shadow-2xs"
+                        className="px-3 py-1.5 rounded-full bg-white border border-anbar-subtle text-anbar-dark hover:border-anbar-amber hover:text-anbar-amber text-[11px] font-bold transition-all flex items-center gap-1 shadow-2xs"
                       >
                         <RotateCcw className="w-3 h-3" />
-                        <span>طلب مماثل</span>
+                        <span>طلب مرة أخرى</span>
                       </button>
                     )}
                   </div>

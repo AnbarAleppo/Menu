@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient';
 import { getServiceSupabase } from '@/lib/supabaseServer';
-import { INITIAL_CATEGORIES } from '@/lib/initialData';
+import { INITIAL_CATEGORIES, getCategorySection } from '@/lib/initialData';
 import { Category } from '@/lib/types';
+import { verifyAdminRequest } from '@/lib/auth';
 
 export async function GET(req: NextRequest) {
   try {
@@ -14,6 +15,10 @@ export async function GET(req: NextRequest) {
       if (!includeInactive) {
         cats = cats.filter(c => c.is_active);
       }
+      cats = cats.map(c => ({
+        ...c,
+        section: getCategorySection(c),
+      }));
       cats.sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
       return NextResponse.json({ data: cats, source: 'local' });
     }
@@ -33,7 +38,13 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ data: INITIAL_CATEGORIES, source: 'fallback' });
     }
 
-    return NextResponse.json({ data, source: 'supabase' });
+    // Attach inferred section (food vs drinks)
+    const enrichedData = (data as Category[]).map(c => ({
+      ...c,
+      section: getCategorySection(c),
+    }));
+
+    return NextResponse.json({ data: enrichedData, source: 'supabase' });
   } catch (err: any) {
     return NextResponse.json({ data: INITIAL_CATEGORIES, source: 'fallback' });
   }
@@ -41,6 +52,11 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    // CRITICAL SECURITY FIX: Only authorized admin can add categories
+    if (!verifyAdminRequest(req)) {
+      return NextResponse.json({ error: 'غير مصرح لك بإضافة فئات جديدة' }, { status: 401 });
+    }
+
     const serverSupabase = getServiceSupabase();
     if (!serverSupabase) {
       return NextResponse.json({ error: 'Supabase is not configured' }, { status: 400 });
@@ -70,14 +86,24 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json({ data });
+    return NextResponse.json({
+      data: {
+        ...data,
+        section: getCategorySection(data),
+      },
+    });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return NextResponse.json({ error: 'حدث خطأ في الحفظ' }, { status: 500 });
   }
 }
 
 export async function PUT(req: NextRequest) {
   try {
+    // CRITICAL SECURITY FIX: Only authorized admin can update categories
+    if (!verifyAdminRequest(req)) {
+      return NextResponse.json({ error: 'غير مصرح لك بتعديل الفئات' }, { status: 401 });
+    }
+
     const serverSupabase = getServiceSupabase();
     if (!serverSupabase) {
       return NextResponse.json({ error: 'Supabase is not configured' }, { status: 400 });
@@ -105,14 +131,24 @@ export async function PUT(req: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json({ data });
+    return NextResponse.json({
+      data: {
+        ...data,
+        section: getCategorySection(data),
+      },
+    });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return NextResponse.json({ error: 'حدث خطأ في التعديل' }, { status: 500 });
   }
 }
 
 export async function DELETE(req: NextRequest) {
   try {
+    // CRITICAL SECURITY FIX: Only authorized admin can delete categories
+    if (!verifyAdminRequest(req)) {
+      return NextResponse.json({ error: 'غير مصرح لك بحذف الفئات' }, { status: 401 });
+    }
+
     const serverSupabase = getServiceSupabase();
     if (!serverSupabase) {
       return NextResponse.json({ error: 'Supabase is not configured' }, { status: 400 });
@@ -125,7 +161,6 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ error: 'معرف الفئة مطلوب' }, { status: 400 });
     }
 
-    // Check if category is protected (all)
     if (slug === 'all') {
       return NextResponse.json({ error: 'لا يمكن حذف الفئة العامة الافتراضية' }, { status: 400 });
     }
@@ -141,13 +176,18 @@ export async function DELETE(req: NextRequest) {
 
     return NextResponse.json({ success: true });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return NextResponse.json({ error: 'حدث خطأ في الحذف' }, { status: 500 });
   }
 }
 
 // BATCH REORDER CATEGORIES
 export async function PATCH(req: NextRequest) {
   try {
+    // CRITICAL SECURITY FIX: Only authorized admin can reorder categories
+    if (!verifyAdminRequest(req)) {
+      return NextResponse.json({ error: 'غير مصرح لك بإعادة ترتيب الفئات' }, { status: 401 });
+    }
+
     const serverSupabase = getServiceSupabase();
     if (!serverSupabase) {
       return NextResponse.json({ error: 'Supabase is not configured' }, { status: 400 });
@@ -168,6 +208,6 @@ export async function PATCH(req: NextRequest) {
 
     return NextResponse.json({ success: true });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return NextResponse.json({ error: 'حدث خطأ في إعادة الترتيب' }, { status: 500 });
   }
 }

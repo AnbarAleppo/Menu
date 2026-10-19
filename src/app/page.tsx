@@ -3,6 +3,7 @@
 import React, { useState, useEffect, Suspense } from 'react';
 import Image from 'next/image';
 import { useSearchParams } from 'next/navigation';
+import { LayoutGrid, RectangleVertical } from 'lucide-react';
 import AmbientBlobs from '@/components/AmbientBlobs';
 import Navbar from '@/components/Navbar';
 import HeroSection from '@/components/HeroSection';
@@ -14,14 +15,36 @@ import FloatingCartBar from '@/components/FloatingCartBar';
 import MobileSearchModal from '@/components/MobileSearchModal';
 import Footer from '@/components/Footer';
 import ToastNotification from '@/components/ToastNotification';
-import { MenuItem, Category, CartItem } from '@/lib/types';
-import { INITIAL_MENU_ITEMS, INITIAL_CATEGORIES } from '@/lib/initialData';
+import { MenuItem, Category, CartItem, MenuSection } from '@/lib/types';
+import { INITIAL_MENU_ITEMS, INITIAL_CATEGORIES, getCategorySection } from '@/lib/initialData';
+
+function attachBaselineRatings(items: MenuItem[], ratingsMap: Record<string, any> = {}): MenuItem[] {
+  return items.map((item) => {
+    if (ratingsMap[item.id]) {
+      return {
+        ...item,
+        rating: ratingsMap[item.id].average,
+        rating_count: ratingsMap[item.id].count,
+      };
+    }
+    let hash = 0;
+    for (let i = 0; i < item.id.length; i++) {
+      hash = (hash * 31 + item.id.charCodeAt(i)) >>> 0;
+    }
+    return {
+      ...item,
+      rating: 4.6 + ((hash % 5) / 10),
+      rating_count: 14 + (hash % 30),
+    };
+  });
+}
 
 function MenuAppContent() {
   const searchParams = useSearchParams();
   const [categories, setCategories] = useState<Category[]>(INITIAL_CATEGORIES);
-  const [menuItems, setMenuItems] = useState<MenuItem[]>(INITIAL_MENU_ITEMS);
-  const [activeCategory, setActiveCategory] = useState<string>('all');
+  const [menuItems, setMenuItems] = useState<MenuItem[]>(() => attachBaselineRatings(INITIAL_MENU_ITEMS));
+  const [activeSection, setActiveSection] = useState<MenuSection>('food');
+  const [activeCategory, setActiveCategory] = useState<string>('burgers');
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [cart, setCart] = useState<CartItem[]>([]);
   const [tableNumber, setTableNumber] = useState<string>('طاولة رقم 1');
@@ -30,6 +53,7 @@ function MenuAppContent() {
   const [isSearchModalOpen, setIsSearchModalOpen] = useState<boolean>(false);
   const [selectedDish, setSelectedDish] = useState<MenuItem | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [gridCols, setGridCols] = useState<1 | 2>(2);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -64,20 +88,34 @@ function MenuAppContent() {
     }
   }, [searchParams]);
 
-  // 2. Fetch Live Menu and Categories from Supabase / API
+  // 2. Fetch Live Menu, Categories, and Ratings from API
   useEffect(() => {
     async function loadData() {
       try {
-        const [catRes, menuRes] = await Promise.all([
+        const [catRes, menuRes, ratingsRes] = await Promise.all([
           fetch('/api/categories'),
           fetch('/api/menu'),
+          fetch('/api/ratings'),
         ]);
+
+        let ratingsMap: Record<string, any> = {};
+        if (ratingsRes.ok) {
+          const ratingsData = await ratingsRes.json();
+          if (ratingsData?.ratings) {
+            ratingsMap = ratingsData.ratings;
+          }
+        }
 
         if (catRes.ok) {
           const catData = await catRes.json();
           if (catData.data && catData.data.length > 0) {
-            const sortedCats = [...catData.data].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+            const sortedCats = [...catData.data]
+              .filter((c) => c.slug !== 'all')
+              .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
             setCategories(sortedCats);
+            if (sortedCats.length > 0) {
+              setActiveCategory((prev) => (prev === 'all' || !prev ? sortedCats[0].slug : prev));
+            }
           }
         }
 
@@ -85,8 +123,12 @@ function MenuAppContent() {
           const menuData = await menuRes.json();
           if (menuData.data && menuData.data.length > 0) {
             const sortedMenu = [...menuData.data].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
-            setMenuItems(sortedMenu);
+            setMenuItems(attachBaselineRatings(sortedMenu, ratingsMap));
+          } else {
+            setMenuItems((prev) => attachBaselineRatings(prev, ratingsMap));
           }
+        } else {
+          setMenuItems((prev) => attachBaselineRatings(prev, ratingsMap));
         }
       } catch (err) {
         console.warn('Using initial fallback menu data:', err);
@@ -96,14 +138,41 @@ function MenuAppContent() {
     loadData();
   }, []);
 
+  const handleRateDish = async (dishId: string, score: number) => {
+    try {
+      const res = await fetch('/api/ratings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ itemId: dishId, score }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setMenuItems((prev) =>
+          prev.map((item) =>
+            item.id === dishId
+              ? { ...item, rating: data.rating, rating_count: data.rating_count }
+              : item
+          )
+        );
+        setSelectedDish((prev) =>
+          prev && prev.id === dishId
+            ? { ...prev, rating: data.rating, rating_count: data.rating_count }
+            : prev
+        );
+        showToast('شكراً لك! تم تسجيل تقييمك بنجاح ⭐');
+      }
+    } catch (err) {
+      console.error('Rating submit error:', err);
+    }
+  };
+
   // Filter Items based on category and search
   const filteredItems = menuItems.filter((item) => {
-    const matchCategory = activeCategory === 'all' || item.category_slug === activeCategory;
+    const matchCategory = searchTerm.trim() !== '' ? true : item.category_slug === activeCategory;
     const matchSearch =
       searchTerm === '' ||
       item.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (item.ingredients && item.ingredients.toLowerCase().includes(searchTerm.toLowerCase()));
+      item.description.toLowerCase().includes(searchTerm.toLowerCase());
     return matchCategory && matchSearch;
   });
 
@@ -189,92 +258,78 @@ function MenuAppContent() {
         <HeroSection />
 
         {/* Menu Section */}
-        <section id="menu-section" className="py-10 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
-          {/* Header Title & Subtitle directly Above Categories Bar */}
-          <div className="mb-6">
-            <h2 className="font-cairo font-black text-3xl sm:text-4xl text-anbar-dark tracking-tight">
-              قائمة الطعام الكاملة
-            </h2>
-            <p className="text-anbar-dark/65 text-xs sm:text-sm mt-1.5 font-medium">
-              أطباق طازجة محضرة بأجود المكونات المحلية وزيوت العصر البارد.
-            </p>
+        <section id="menu-section" className="py-8 w-full">
+          {/* Transparent Titlebar */}
+          <div className="px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto mb-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 py-1">
+              <div>
+                <h2 className="font-cairo font-black text-2xl sm:text-3xl text-anbar-dark tracking-tight">
+                  قائمة الطعام الكاملة
+                </h2>
+                <p className="text-anbar-dark/65 text-xs sm:text-sm mt-1 font-medium">
+                  أطباق طازجة محضرة بأجود المكونات المحلية.
+                </p>
+              </div>
+
+              {/* 1 vs 2 Columns View Switcher */}
+              <div className="flex items-center self-start sm:self-center bg-white/85 p-0.5 rounded-full border border-anbar-subtle shadow-2xs shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setGridCols(1)}
+                  className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                    gridCols === 1
+                      ? 'bg-anbar-dark text-white shadow-xs'
+                      : 'text-anbar-dark/60 hover:text-anbar-dark'
+                  }`}
+                  title="عرض عمود واحد"
+                >
+                  <RectangleVertical className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">عمود واحد</span>
+                  <span className="sm:hidden">1</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setGridCols(2)}
+                  className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                    gridCols === 2
+                      ? 'bg-anbar-dark text-white shadow-xs'
+                      : 'text-anbar-dark/60 hover:text-anbar-dark'
+                  }`}
+                  title="عرض عمودين"
+                >
+                  <LayoutGrid className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">عمودين</span>
+                  <span className="sm:hidden">2</span>
+                </button>
+              </div>
+            </div>
           </div>
 
+          {/* Full-width 100% Sticky Category Bar with Food / Drinks 2-Tier Hierarchy */}
           <CategoryTabs
             categories={categories}
             activeCategory={activeCategory}
             onSelectCategory={setActiveCategory}
+            activeSection={activeSection}
+            onSelectSection={setActiveSection}
             itemsCount={filteredItems.length}
           />
 
-          <MenuGrid
-            items={filteredItems}
-            cart={cart}
-            onAddToCart={handleAddToCart}
-            onUpdateCartQty={handleUpdateCartQty}
-            onOpenDishModal={(item) => setSelectedDish(item)}
-            onResetFilters={() => {
-              setActiveCategory('all');
-              setSearchTerm('');
-            }}
-          />
-        </section>
-
-        {/* Restaurant Philosophy Banner */}
-        <section className="py-16 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
-          <div className="rounded-5xl bg-white border border-anbar-subtle p-8 md:p-14 relative overflow-hidden shadow-soft">
-            <div className="absolute -left-20 -bottom-20 w-80 h-80 bg-anbar-amber/10 rounded-full blur-3xl pointer-events-none"></div>
-            <div className="absolute -right-20 -top-20 w-80 h-80 bg-anbar-sage/10 rounded-full blur-3xl pointer-events-none"></div>
-
-            <div className="grid md:grid-cols-2 gap-12 items-center relative z-10">
-              <div>
-                <span className="text-xs font-bold uppercase tracking-wider text-anbar-rust">
-                  أجواء وفلسفة عنبر
-                </span>
-                <h2 className="font-cairo font-extrabold text-3xl sm:text-5xl text-anbar-dark mt-2 leading-tight">
-                  أشكال عضوية، ألوان دافئة، ولحظات هادئة.
-                </h2>
-                <p className="text-anbar-dark/70 text-sm sm:text-base mt-4 leading-relaxed font-medium">
-                  صُمم عنبر ليكون مساحة دافئة ومريحة لمجتمعنا، بألوان التراكوتا البسيطة، ولمسات المريمية الناعمة، والضوء الطبيعي. كل كوب قهوة محضر بعناية، وكل طبق مصمم بحب للمواسم.
-                </p>
-
-                <div className="grid grid-cols-3 gap-4 mt-8">
-                  <div className="p-4 rounded-2xl bg-anbar-bg border border-anbar-subtle text-center">
-                    <span className="font-cairo font-black text-2xl text-anbar-amber block">100%</span>
-                    <span className="text-[11px] font-bold text-anbar-dark/60">مكونات عضوية</span>
-                  </div>
-                  <div className="p-4 rounded-2xl bg-anbar-bg border border-anbar-subtle text-center">
-                    <span className="font-cairo font-black text-2xl text-anbar-slate block">08:00</span>
-                    <span className="text-[11px] font-bold text-anbar-dark/60">الافتتاح صباحاً</span>
-                  </div>
-                  <div className="p-4 rounded-2xl bg-anbar-bg border border-anbar-subtle text-center">
-                    <span className="font-cairo font-black text-2xl text-anbar-rust block">4.9 ★</span>
-                    <span className="text-[11px] font-bold text-anbar-dark/60">تقييم الرواد</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="relative h-60 rounded-3xl overflow-hidden shadow-sm">
-                  <Image
-                    src="https://images.unsplash.com/photo-1554118811-1e0d58224f24?auto=format&fit=crop&w=600&q=80"
-                    alt="جلسات عنبر"
-                    fill
-                    className="object-cover"
-                    sizes="(max-width: 768px) 50vw, 300px"
-                  />
-                </div>
-                <div className="relative h-60 rounded-3xl overflow-hidden shadow-sm mt-6">
-                  <Image
-                    src="https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=600&q=80"
-                    alt="طاولة عنبر"
-                    fill
-                    className="object-cover"
-                    sizes="(max-width: 768px) 50vw, 300px"
-                  />
-                </div>
-              </div>
-            </div>
+          {/* Menu Items Grid */}
+          <div className="px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
+            <MenuGrid
+              items={filteredItems}
+              cart={cart}
+              columns={gridCols}
+              onAddToCart={handleAddToCart}
+              onUpdateCartQty={handleUpdateCartQty}
+              onOpenDishModal={(item) => setSelectedDish(item)}
+              onResetFilters={() => {
+                setActiveSection('food');
+                setActiveCategory('burgers');
+                setSearchTerm('');
+              }}
+            />
           </div>
         </section>
       </main>
@@ -289,6 +344,8 @@ function MenuAppContent() {
         onClose={() => setSelectedDish(null)}
         onAddToCartWithQty={handleAddToCartWithQty}
         initialQty={cart.find((c) => c.id === selectedDish?.id)?.qty || 1}
+        isQrDetected={isQrDetected}
+        onRateDish={handleRateDish}
       />
 
       <CartDrawer

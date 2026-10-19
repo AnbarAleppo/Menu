@@ -1,7 +1,7 @@
 -- ==============================================================================
--- ANBAR RESTAURANT - SUPABASE DATABASE SCHEMA & STORAGE SETUP
+-- ANBAR RESTAURANT - SUPABASE DATABASE SCHEMA & SECURED PRODUCTION SETUP
 -- ==============================================================================
--- Copy and paste this script into your Supabase project's SQL Editor and run it.
+-- Run this in your Supabase SQL Editor to enforce impenetrable security and 2-tier categorization.
 
 -- Enable UUID Extension
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
@@ -12,10 +12,24 @@ CREATE TABLE IF NOT EXISTS public.categories (
     slug VARCHAR(50) UNIQUE NOT NULL,
     name_ar VARCHAR(100) NOT NULL,
     name_en VARCHAR(100),
+    section VARCHAR(20) DEFAULT 'food', -- 'food' (المأكولات) or 'drinks' (المشروبات)
     sort_order INT DEFAULT 0,
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
+
+-- Ensure column exists if table was already created
+DO $$ 
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_schema = 'public' 
+        AND table_name = 'categories' 
+        AND column_name = 'section'
+    ) THEN
+        ALTER TABLE public.categories ADD COLUMN section VARCHAR(20) DEFAULT 'food';
+    END IF;
+END $$;
 
 -- 2. MENU ITEMS TABLE
 CREATE TABLE IF NOT EXISTS public.menu_items (
@@ -40,12 +54,12 @@ CREATE TABLE IF NOT EXISTS public.menu_items (
 CREATE TABLE IF NOT EXISTS public.orders (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     order_number SERIAL,
-    table_number VARCHAR(20) DEFAULT 'طاولة عامة',
-    customer_name VARCHAR(100),
+    table_number VARCHAR(50) DEFAULT 'طاولة عامة',
+    customer_name VARCHAR(100) DEFAULT 'زبون الدار',
     customer_phone VARCHAR(50),
     items JSONB NOT NULL, -- Array of { id, title, price, qty, image }
     total NUMERIC(12, 2) NOT NULL,
-    status VARCHAR(50) DEFAULT 'new', -- 'new', 'preparing', 'served', 'completed', 'cancelled'
+    status VARCHAR(50) DEFAULT 'new', -- 'new', 'accepted', 'preparing', 'served', 'completed', 'cancelled'
     notes TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
@@ -59,7 +73,7 @@ CREATE TABLE IF NOT EXISTS public.site_settings (
 );
 
 -- ==============================================================================
--- ROW LEVEL SECURITY (RLS) POLICIES
+-- HARDENED ROW LEVEL SECURITY (RLS) POLICIES
 -- ==============================================================================
 
 -- Enable RLS on all tables
@@ -68,66 +82,106 @@ ALTER TABLE public.menu_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.orders ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.site_settings ENABLE ROW LEVEL SECURITY;
 
--- CATEGORIES POLICIES
+-- Clean up any existing loose/open policies
+DROP POLICY IF EXISTS "Public categories are viewable by everyone" ON public.categories;
+DROP POLICY IF EXISTS "Admin can manage categories" ON public.categories;
+DROP POLICY IF EXISTS "Public menu items are viewable by everyone" ON public.menu_items;
+DROP POLICY IF EXISTS "Admin can manage menu items" ON public.menu_items;
+DROP POLICY IF EXISTS "Public can insert orders" ON public.orders;
+DROP POLICY IF EXISTS "Orders are viewable by everyone" ON public.orders;
+DROP POLICY IF EXISTS "Admin can update orders" ON public.orders;
+DROP POLICY IF EXISTS "Site settings viewable by everyone" ON public.site_settings;
+DROP POLICY IF EXISTS "Admin can update site settings" ON public.site_settings;
+
+-- 1. CATEGORIES POLICIES
 -- Anyone can view active categories
 CREATE POLICY "Public categories are viewable by everyone" 
-ON public.categories FOR SELECT USING (is_active = TRUE);
+ON public.categories FOR SELECT 
+USING (is_active = TRUE);
 
--- Allow all operations for authenticated/service role (Admin)
-CREATE POLICY "Admin can manage categories" 
-ON public.categories FOR ALL USING (true) WITH CHECK (true);
+-- Only authenticated users / service_role can modify categories (Anon users BLOCKED)
+CREATE POLICY "Only authenticated admin can insert categories" 
+ON public.categories FOR INSERT TO authenticated 
+WITH CHECK (true);
 
--- MENU ITEMS POLICIES
+CREATE POLICY "Only authenticated admin can update categories" 
+ON public.categories FOR UPDATE TO authenticated 
+USING (true) WITH CHECK (true);
+
+CREATE POLICY "Only authenticated admin can delete categories" 
+ON public.categories FOR DELETE TO authenticated 
+USING (true);
+
+-- 2. MENU ITEMS POLICIES
 -- Anyone can view available menu items
 CREATE POLICY "Public menu items are viewable by everyone" 
-ON public.menu_items FOR SELECT USING (is_available = TRUE);
+ON public.menu_items FOR SELECT 
+USING (is_available = TRUE);
 
--- Allow all operations for admin/service role
-CREATE POLICY "Admin can manage menu items" 
-ON public.menu_items FOR ALL USING (true) WITH CHECK (true);
+-- Only authenticated users / service_role can modify menu items (Anon users BLOCKED)
+CREATE POLICY "Only authenticated admin can insert menu items" 
+ON public.menu_items FOR INSERT TO authenticated 
+WITH CHECK (true);
 
--- ORDERS POLICIES
--- Anyone can create an order
+CREATE POLICY "Only authenticated admin can update menu items" 
+ON public.menu_items FOR UPDATE TO authenticated 
+USING (true) WITH CHECK (true);
+
+CREATE POLICY "Only authenticated admin can delete menu items" 
+ON public.menu_items FOR DELETE TO authenticated 
+USING (true);
+
+-- 3. ORDERS POLICIES
+-- Anyone can place a new order
 CREATE POLICY "Public can insert orders" 
-ON public.orders FOR INSERT WITH CHECK (true);
+ON public.orders FOR INSERT 
+WITH CHECK (true);
 
--- Anyone can view their recently placed order (or admin view all)
-CREATE POLICY "Orders are viewable by everyone" 
-ON public.orders FOR SELECT USING (true);
+-- Orders are private! Only authenticated staff / service_role can view and update orders
+CREATE POLICY "Only staff can view all orders" 
+ON public.orders FOR SELECT TO authenticated 
+USING (true);
 
--- Admin can update order status
-CREATE POLICY "Admin can update orders" 
-ON public.orders FOR UPDATE USING (true) WITH CHECK (true);
+CREATE POLICY "Only staff can update orders" 
+ON public.orders FOR UPDATE TO authenticated 
+USING (true) WITH CHECK (true);
 
--- SITE SETTINGS POLICIES
-CREATE POLICY "Site settings viewable by everyone" 
-ON public.site_settings FOR SELECT USING (true);
+-- 4. SITE SETTINGS POLICIES
+CREATE POLICY "Site settings are viewable" 
+ON public.site_settings FOR SELECT 
+USING (true);
 
-CREATE POLICY "Admin can update site settings" 
-ON public.site_settings FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Only authenticated admin can update site settings" 
+ON public.site_settings FOR ALL TO authenticated 
+USING (true) WITH CHECK (true);
 
 -- ==============================================================================
 -- STORAGE BUCKET: anbar-assets
 -- ==============================================================================
--- Create the storage bucket if not exists
 INSERT INTO storage.buckets (id, name, public) 
 VALUES ('anbar-assets', 'anbar-assets', true)
 ON CONFLICT (id) DO UPDATE SET public = true;
 
--- Storage RLS Policies: Public read access
+-- Drop loose storage policies
+DROP POLICY IF EXISTS "Public Access for anbar-assets" ON storage.objects;
+DROP POLICY IF EXISTS "Public Upload to anbar-assets" ON storage.objects;
+DROP POLICY IF EXISTS "Public Update to anbar-assets" ON storage.objects;
+DROP POLICY IF EXISTS "Public Delete from anbar-assets" ON storage.objects;
+
+-- Storage: Public can view assets
 CREATE POLICY "Public Access for anbar-assets" 
 ON storage.objects FOR SELECT 
 USING (bucket_id = 'anbar-assets');
 
--- Storage RLS Policies: Upload access for users/admin
-CREATE POLICY "Public Upload to anbar-assets" 
-ON storage.objects FOR INSERT 
+-- Storage: Upload/Delete only for authenticated users / service_role
+CREATE POLICY "Admin Upload to anbar-assets" 
+ON storage.objects FOR INSERT TO authenticated 
 WITH CHECK (bucket_id = 'anbar-assets');
 
-CREATE POLICY "Public Update to anbar-assets" 
-ON storage.objects FOR UPDATE 
+CREATE POLICY "Admin Update to anbar-assets" 
+ON storage.objects FOR UPDATE TO authenticated 
 USING (bucket_id = 'anbar-assets');
 
-CREATE POLICY "Public Delete from anbar-assets" 
-ON storage.objects FOR DELETE 
+CREATE POLICY "Admin Delete from anbar-assets" 
+ON storage.objects FOR DELETE TO authenticated 
 USING (bucket_id = 'anbar-assets');
